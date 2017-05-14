@@ -304,6 +304,16 @@ class SupportArrTest extends TestCase
         $this->assertEquals(['Taylor', 'Abigail'], $array);
     }
 
+    public function testPluckWithArrayValue()
+    {
+        $array = [
+            ['developer' => ['name' => 'Taylor']],
+            ['developer' => ['name' => 'Abigail']],
+        ];
+        $array = Arr::pluck($array, ['developer', 'name']);
+        $this->assertEquals(['Taylor', 'Abigail'], $array);
+    }
+
     public function testPluckWithKeys()
     {
         $array = [
@@ -511,5 +521,16 @@ class SupportArrTest extends TestCase
         $array = ['emails' => ['joe@example.com' => ['name' => 'Joe'], 'jane@localhost' => ['name' => 'Jane']]];
         Arr::forget($array, ['emails.joe@example.com', 'emails.jane@localhost']);
         $this->assertEquals(['emails' => ['joe@example.com' => ['name' => 'Joe']]], $array);
+    }
+
+    public function testWrap()
+    {
+        $string = 'a';
+        $array = ['a'];
+        $object = new stdClass;
+        $object->value = 'a';
+        $this->assertEquals(['a'], Arr::wrap($string));
+        $this->assertEquals($array, Arr::wrap($array));
+        $this->assertEquals([$object], Arr::wrap($object));
     }
 }

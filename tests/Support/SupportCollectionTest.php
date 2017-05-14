@@ -9,7 +9,6 @@ use ReflectionClass;
 use JsonSerializable;
 use PHPUnit\Framework\TestCase;
 use Illuminate\Support\Collection;
-use PHPUnit_Framework_Error_Notice;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Contracts\Support\Arrayable;
 
@@ -228,15 +227,6 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals('bar', $c->offsetGet(1));
     }
 
-    /**
-     * @expectedException PHPUnit_Framework_Error_Notice
-     */
-    public function testArrayAccessOffsetGetOnNonExist()
-    {
-        $c = new Collection(['foo', 'bar']);
-        $c->offsetGet(1000);
-    }
-
     public function testArrayAccessOffsetSet()
     {
         $c = new Collection(['foo', 'foo']);
@@ -248,15 +238,12 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals('qux', $c[2]);
     }
 
-    /**
-     * @expectedException PHPUnit_Framework_Error_Notice
-     */
     public function testArrayAccessOffsetUnset()
     {
         $c = new Collection(['foo', 'bar']);
 
         $c->offsetUnset(1);
-        $c[1];
+        $this->assertFalse(isset($c[1]));
     }
 
     public function testForgetSingleKey()
@@ -395,6 +382,18 @@ class SupportCollectionTest extends TestCase
     {
         $c = new Collection([['v' => 1], ['v' => 2], ['v' => 3], ['v' => '3'], ['v' => 4]]);
         $this->assertEquals([['v' => 1], ['v' => 3]], $c->whereInStrict('v', [1, 3])->values()->all());
+    }
+
+    public function testWhereNotIn()
+    {
+        $c = new Collection([['v' => 1], ['v' => 2], ['v' => 3], ['v' => '3'], ['v' => 4]]);
+        $this->assertEquals([['v' => 2], ['v' => 4]], $c->whereNotIn('v', [1, 3])->values()->all());
+    }
+
+    public function testWhereNotInStrict()
+    {
+        $c = new Collection([['v' => 1], ['v' => 2], ['v' => 3], ['v' => '3'], ['v' => 4]]);
+        $this->assertEquals([['v' => 2], ['v' => '3'], ['v' => 4]], $c->whereNotInStrict('v', [1, 3])->values()->all());
     }
 
     public function testValues()
@@ -924,6 +923,25 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals(['foo' => 'bar'], $collection->all());
     }
 
+    public function testTimesMethod()
+    {
+        $two = Collection::times(2, function ($number) {
+            return 'slug-'.$number;
+        });
+
+        $zero = Collection::times(0, function ($number) {
+            return 'slug-'.$number;
+        });
+
+        $negative = Collection::times(-4, function ($number) {
+            return 'slug-'.$number;
+        });
+
+        $this->assertEquals(['slug-1', 'slug-2'], $two->all());
+        $this->assertTrue($zero->isEmpty());
+        $this->assertTrue($negative->isEmpty());
+    }
+
     public function testConstructMakeFromObject()
     {
         $object = new stdClass();
@@ -1016,6 +1034,35 @@ class SupportCollectionTest extends TestCase
             return $person['hobbies'];
         });
         $this->assertEquals(['programming', 'basketball', 'music', 'powerlifting'], $data->all());
+    }
+
+    public function testMapToGroups()
+    {
+        $data = new Collection([
+            ['id' => 1, 'name' => 'A'],
+            ['id' => 2, 'name' => 'B'],
+            ['id' => 3, 'name' => 'C'],
+            ['id' => 4, 'name' => 'B'],
+        ]);
+
+        $groups = $data->mapToGroups(function ($item, $key) {
+            return [$item['name'] => $item['id']];
+        });
+
+        $this->assertInstanceOf(Collection::class, $groups);
+        $this->assertEquals(['A' => [1], 'B' => [2, 4], 'C' => [3]], $groups->toArray());
+        $this->assertInstanceOf(Collection::class, $groups['A']);
+    }
+
+    public function testMapToGroupsWithNumericKeys()
+    {
+        $data = new Collection([1, 2, 3, 2, 1]);
+
+        $groups = $data->mapToGroups(function ($item, $key) {
+            return [$item => $key];
+        });
+
+        $this->assertEquals([1 => [0, 4], 2 => [1, 3], 3 => [2]], $groups->toArray());
     }
 
     public function testMapWithKeys()
@@ -1881,6 +1928,51 @@ class SupportCollectionTest extends TestCase
         $this->assertSame(['a' => ['free' => true], 'c' => ['free' => true]], $free->toArray());
 
         $this->assertSame(['b' => ['free' => false]], $premium->toArray());
+    }
+
+    public function testTap()
+    {
+        $collection = new Collection([1, 2, 3]);
+
+        $fromTap = [];
+        $collection = $collection->tap(function ($collection) use (&$fromTap) {
+            $fromTap = $collection->slice(0, 1)->toArray();
+        });
+
+        $this->assertSame([1], $fromTap);
+        $this->assertSame([1, 2, 3], $collection->toArray());
+    }
+
+    public function testWhen()
+    {
+        $collection = new Collection(['michael', 'tom']);
+
+        $collection->when(true, function ($collection) {
+            return $collection->push('adam');
+        });
+
+        $this->assertSame(['michael', 'tom', 'adam'], $collection->toArray());
+
+        $collection = new Collection(['michael', 'tom']);
+
+        $collection->when(false, function ($collection) {
+            return $collection->push('adam');
+        });
+
+        $this->assertSame(['michael', 'tom'], $collection->toArray());
+    }
+
+    public function testWhenDefault()
+    {
+        $collection = new Collection(['michael', 'tom']);
+
+        $collection->when(false, function ($collection) {
+            return $collection->push('adam');
+        }, function ($collection) {
+            return $collection->push('taylor');
+        });
+
+        $this->assertSame(['michael', 'tom', 'taylor'], $collection->toArray());
     }
 }
 

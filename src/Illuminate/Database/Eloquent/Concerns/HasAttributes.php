@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Database\Eloquent\JsonEncodingException;
 
 trait HasAttributes
 {
@@ -358,7 +359,7 @@ trait HasAttributes
      */
     protected function getAttributeFromArray($key)
     {
-        if (array_key_exists($key, $this->attributes)) {
+        if (isset($this->attributes[$key])) {
             return $this->attributes[$key];
         }
     }
@@ -399,8 +400,7 @@ trait HasAttributes
         $relation = $this->$method();
 
         if (! $relation instanceof Relation) {
-            throw new LogicException('Relationship method must return an object of type '
-                .'Illuminate\Database\Eloquent\Relations\Relation');
+            throw new LogicException(get_class($this).'::'.$method.' must return a relationship instance.');
         }
 
         return tap($relation->getResults(), function ($results) use ($method) {
@@ -526,7 +526,7 @@ trait HasAttributes
         }
 
         if ($this->isJsonCastable($key) && ! is_null($value)) {
-            $value = $this->asJson($value);
+            $value = $this->castAttributeAsJson($key, $value);
         }
 
         // If this attribute contains a JSON ->, we'll set the proper value in the
@@ -607,6 +607,26 @@ trait HasAttributes
     {
         return isset($this->attributes[$key]) ?
                     $this->fromJson($this->attributes[$key]) : [];
+    }
+
+    /**
+     * Cast the given attribute to JSON.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return string
+     */
+    protected function castAttributeAsJson($key, $value)
+    {
+        $value = $this->asJson($value);
+
+        if ($value === false) {
+            throw JsonEncodingException::forAttribute(
+                $this, $key, json_last_error_msg()
+            );
+        }
+
+        return $value;
     }
 
     /**
@@ -744,7 +764,7 @@ trait HasAttributes
     {
         $defaults = [static::CREATED_AT, static::UPDATED_AT];
 
-        return $this->timestamps ? array_merge($this->dates, $defaults) : $this->dates;
+        return $this->usesTimestamps() ? array_merge($this->dates, $defaults) : $this->dates;
     }
 
     /**
@@ -939,11 +959,8 @@ trait HasAttributes
     {
         $dirty = [];
 
-        foreach ($this->attributes as $key => $value) {
-            if (! array_key_exists($key, $this->original)) {
-                $dirty[$key] = $value;
-            } elseif ($value !== $this->original[$key] &&
-                    ! $this->originalIsNumericallyEquivalent($key)) {
+        foreach ($this->getAttributes() as $key => $value) {
+            if (! $this->originalIsEquivalent($key, $value)) {
                 $dirty[$key] = $value;
             }
         }
@@ -952,22 +969,34 @@ trait HasAttributes
     }
 
     /**
-     * Determine if the new and old values for a given key are numerically equivalent.
+     * Determine if the new and old values for a given key are equivalent.
      *
-     * @param  string  $key
+     * @param  string $key
+     * @param  mixed  $current
      * @return bool
      */
-    protected function originalIsNumericallyEquivalent($key)
+    protected function originalIsEquivalent($key, $current)
     {
-        $current = $this->attributes[$key];
+        if (! array_key_exists($key, $this->original)) {
+            return false;
+        }
 
-        $original = $this->original[$key];
+        $original = $this->getOriginal($key);
 
-        // This method checks if the two values are numerically equivalent even if they
-        // are different types. This is in case the two values are not the same type
-        // we can do a fair comparison of the two values to know if this is dirty.
+        if ($current === $original) {
+            return true;
+        } elseif (is_null($current)) {
+            return false;
+        } elseif ($this->isDateAttribute($key)) {
+            return $this->fromDateTime($current) ===
+                   $this->fromDateTime($original);
+        } elseif ($this->hasCast($key)) {
+            return $this->castAttribute($key, $current) ===
+                   $this->castAttribute($key, $original);
+        }
+
         return is_numeric($current) && is_numeric($original)
-            && strcmp((string) $current, (string) $original) === 0;
+                && strcmp((string) $current, (string) $original) === 0;
     }
 
     /**

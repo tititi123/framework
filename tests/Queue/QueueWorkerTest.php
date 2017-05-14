@@ -257,9 +257,11 @@ class WorkerFakeJob
     public $callback;
     public $deleted = false;
     public $releaseAfter;
+    public $released = false;
     public $maxTries;
     public $attempts = 0;
     public $failedWith;
+    public $failed = false;
     public $connectionName;
 
     public function __construct($callback = null)
@@ -296,7 +298,14 @@ class WorkerFakeJob
 
     public function release($delay)
     {
+        $this->released = true;
+
         $this->releaseAfter = $delay;
+    }
+
+    public function isReleased()
+    {
+        return $this->released;
     }
 
     public function attempts()
@@ -304,32 +313,25 @@ class WorkerFakeJob
         return $this->attempts;
     }
 
+    public function markAsFailed()
+    {
+        $this->failed = true;
+    }
+
     public function failed($e)
     {
+        $this->markAsFailed();
+
         $this->failedWith = $e;
+    }
+
+    public function hasFailed()
+    {
+        return $this->failed;
     }
 
     public function setConnectionName($name)
     {
         $this->connectionName = $name;
-    }
-
-    public function testJobSleepsWhenAnExceptionIsThrownForADaemonWorker()
-    {
-        $exceptionHandler = m::mock('Illuminate\Contracts\Debug\ExceptionHandler');
-        $job = m::mock('Illuminate\Contracts\Queue\Job');
-        $job->shouldReceive('fire')->once()->andReturnUsing(function () {
-            throw new RuntimeException;
-        });
-        $worker = m::mock('Illuminate\Queue\Worker', [$manager = m::mock('Illuminate\Queue\QueueManager')])->makePartial();
-        $manager->shouldReceive('connection')->once()->with('connection')->andReturn($connection = m::mock('StdClass'));
-        $manager->shouldReceive('getName')->andReturn('connection');
-        $connection->shouldReceive('pop')->once()->with('queue')->andReturn($job);
-        $worker->shouldReceive('sleep')->once()->with(3);
-
-        $exceptionHandler->shouldReceive('report')->once();
-
-        $worker->setDaemonExceptionHandler($exceptionHandler);
-        $worker->pop('connection', 'queue');
     }
 }

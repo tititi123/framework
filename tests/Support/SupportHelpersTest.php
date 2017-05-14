@@ -5,6 +5,7 @@ namespace Illuminate\Tests\Support;
 use stdClass;
 use ArrayAccess;
 use Mockery as m;
+use RuntimeException;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\TestCase;
 
@@ -645,6 +646,17 @@ class SupportHelpersTest extends TestCase
         ));
     }
 
+    public function testArrayWrap()
+    {
+        $string = 'a';
+        $array = ['a'];
+        $object = new stdClass;
+        $object->value = 'a';
+        $this->assertEquals(['a'], array_wrap($string));
+        $this->assertEquals($array, array_wrap($array));
+        $this->assertEquals([$object], array_wrap($object));
+    }
+
     public function testHead()
     {
         $array = ['a', 'b', 'c'];
@@ -694,6 +706,27 @@ class SupportHelpersTest extends TestCase
         $this->assertEquals(2, tap($object, function ($object) {
             $object->id = 2;
         })->id);
+
+        $mock = m::mock();
+        $mock->shouldReceive('foo')->once()->andReturn('bar');
+        $this->assertEquals($mock, tap($mock)->foo());
+    }
+
+    /**
+     * @expectedException RuntimeException
+     */
+    public function testThrow()
+    {
+        throw_if(true, new RuntimeException);
+    }
+
+    /**
+     * @expectedException RuntimeException
+     * @expectedExceptionMessage Test Message
+     */
+    public function testThrowWithString()
+    {
+        throw_if(true, RuntimeException::class, 'Test Message');
     }
 }
 

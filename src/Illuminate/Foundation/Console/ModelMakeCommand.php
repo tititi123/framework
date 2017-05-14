@@ -40,13 +40,36 @@ class ModelMakeCommand extends GeneratorCommand
             return;
         }
 
+        if ($this->option('all')) {
+            $this->input->setOption('factory', true);
+            $this->input->setOption('migration', true);
+            $this->input->setOption('controller', true);
+            $this->input->setOption('resource', true);
+        }
+
+        if ($this->option('factory')) {
+            $this->createFactory();
+        }
+
         if ($this->option('migration')) {
             $this->createMigration();
         }
 
-        if ($this->option('controller')) {
+        if ($this->option('controller') || $this->option('resource')) {
             $this->createController();
         }
+    }
+
+    /**
+     * Create a model factory for the model.
+     *
+     * @return void
+     */
+    protected function createFactory()
+    {
+        $this->call('make:factory', [
+            'name' => $this->argument('name'),
+        ]);
     }
 
     /**
@@ -73,9 +96,11 @@ class ModelMakeCommand extends GeneratorCommand
     {
         $controller = Str::studly(class_basename($this->argument('name')));
 
+        $modelName = $this->qualifyClass($this->getNameInput());
+
         $this->call('make:controller', [
             'name' => "{$controller}Controller",
-            '--resource' => $this->option('resource'),
+            '--model' => $this->option('resource') ? $modelName : null,
         ]);
     }
 
@@ -108,9 +133,13 @@ class ModelMakeCommand extends GeneratorCommand
     protected function getOptions()
     {
         return [
-            ['migration', 'm', InputOption::VALUE_NONE, 'Create a new migration file for the model.'],
+            ['all', 'a', InputOption::VALUE_NONE, 'Generate a migration, factory, and resource controller for the model'],
 
-            ['controller', 'c', InputOption::VALUE_NONE, 'Create a new controller for the model.'],
+            ['controller', 'c', InputOption::VALUE_NONE, 'Create a new controller for the model'],
+
+            ['factory', 'f', InputOption::VALUE_NONE, 'Create a new factory for the model'],
+
+            ['migration', 'm', InputOption::VALUE_NONE, 'Create a new migration file for the model'],
 
             ['resource', 'r', InputOption::VALUE_NONE, 'Indicates if the generated controller should be a resource controller'],
         ];
